@@ -1,122 +1,153 @@
+import com.javatv.enums.ChannelCategory;
+import com.javatv.model.Channel;
+import com.javatv.model.Television;
+import com.javatv.repository.ChannelRepository;
+import com.javatv.repository.InMemoryChannelRepository;
+import com.javatv.service.TvService;
+import com.javatv.service.TvServiceImpl;
+
 import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * Televizyon Sınıfı - Profesyonel Servis Katmanı ile Entegre Edilmiş Sürüm.
+ * Orijinal metod isimlerini (tvac, tvKapat, sesiAzalt, sesiArir) korurken
+ * arkasında SOLID ve Observer mimarisi barındırır.
+ */
 public class Tv {
-    private String marka;
-    private String boyut;
-    private boolean acik = false;
-    int kanalNumarasi;
-    String kanalAdi;
-    private int ses = 10;
+    private final TvService tvService;
+    private final Television television;
 
-    private ArrayList<Kanal> kanallar = new ArrayList<>(); // kanal listem için
+    public Tv(String marka, String boyut) {
+        int size = 55;
+        try {
+            // Boyut ifadesinden sayısal inç değerini çıkar
+            String cleanSize = boyut.replaceAll("[^0-9]", "");
+            if (!cleanSize.isEmpty()) {
+                size = Integer.parseInt(cleanSize);
+            }
+        } catch (Exception ignored) {}
 
-    public String getBoyut() {
-        return boyut;
-    }
-
-    public void setBoyut(String boyut) {
-        this.boyut = boyut;
+        this.television = new Television(marka, "Smart Crystal Series", size);
+        ChannelRepository repository = new InMemoryChannelRepository();
+        this.tvService = new TvServiceImpl(this.television, repository);
     }
 
     public String getMarka() {
-        return marka;
+        return television.getBrand();
     }
 
-    public void setMarka(String marka) {
-        this.marka = marka;
+    public String getBoyut() {
+        return television.getScreenSizeInches() + " inç";
     }
 
-    public Tv(String marka, String boyut) {
-        this.boyut = boyut;
-        this.marka = marka;
-        kanallariOlustur("cnn", "1");
-        kanallariOlustur("trt haber", "2");
-        kanallariOlustur("atv", "3");
-        kanallariOlustur("kanal d", "4");
-        kanallariOlustur("fox", "5");
-        kanallariOlustur("ntv", "6");
-        kanallariOlustur("HaberTÜRK","7");
+    public boolean isAcik() {
+        return tvService.isPoweredOn();
     }
 
-    private void kanallariOlustur(String ad, String no) {
-        Kanal k = new Kanal(ad, no);
-        kanallar.add(k);
-    }
-
-    // 2. seçenek hakkı için
+    // 2. Seçenek: TV Aç
     public void tvac() {
-        if (!acik) {
-            acik = true;
-            System.out.println("TV açıldı.");
+        if (!tvService.isPoweredOn()) {
+            tvService.powerOn();
+            System.out.println("[+] TV açıldı. (Model: " + television.getBrand() + " " + television.getScreenSizeInches() + "\")");
         } else {
-            System.out.println("TV zaten açık.");
+            System.out.println("[!] TV zaten açık.");
         }
     }
 
-    // 3. seçenek hakkı için
+    // 3. Seçenek: TV Kapat
     public void tvKapat() {
-        if (acik) {
-            acik = false;
-            System.out.println("TV kapatıldı.");
+        if (tvService.isPoweredOn()) {
+            tvService.powerOff();
+            System.out.println("[-] TV kapatıldı (Bekleme Modu).");
         } else {
-            System.out.println("TV zaten kapalı.");
+            System.out.println("[!] TV zaten kapalı.");
         }
     }
 
-    // 4. seçenek hakkı
+    // 4. Seçenek: Sesi Azalt
     public void sesiAzalt() {
-        if (acik && ses > 0) {
-            ses--;
-            System.out.println("Ses: " + ses);
-        } else {
-            if(!acik) {
-                System.out.println("TV kapalı.");
-            }
-            System.out.println("TV kapalı veya ses seviyesi minimum zaten.");
+        if (!tvService.isPoweredOn()) {
+            System.out.println("[-] İşlem başarısız: TV kapalı. Lütfen önce TV'yi açınız.");
+            return;
+        }
+        int cur = television.getVolume();
+        if (cur <= Television.MIN_VOLUME) {
+            System.out.println("[!] Ses seviyesi minimum zaten (" + Television.MIN_VOLUME + ").");
+            return;
+        }
+        int newVol = tvService.volumeDown();
+        System.out.println("[🔊] Ses Seviyesi Azaltıldı: " + newVol + "/" + Television.MAX_VOLUME);
+    }
+
+    // 5. Seçenek: Sesi Artır (Orijinal imza sesiArir ve düzeltilmiş sesiArtir)
+    public void sesiArir() {
+        sesiArtir();
+    }
+
+    public void sesiArtir() {
+        if (!tvService.isPoweredOn()) {
+            System.out.println("[-] İşlem başarısız: TV kapalı. Lütfen önce TV'yi açınız.");
+            return;
+        }
+        int cur = television.getVolume();
+        if (cur >= Television.MAX_VOLUME) {
+            System.out.println("[!] Ses seviyesi maksimum zaten (" + Television.MAX_VOLUME + ").");
+            return;
+        }
+        int newVol = tvService.volumeUp();
+        System.out.println("[🔊] Ses Seviyesi Artırıldı: " + newVol + "/" + Television.MAX_VOLUME);
+    }
+
+    // 6. Seçenek: Kanal Değiştir
+    public void kanaliDegistir(int kanalNo) {
+        if (!tvService.isPoweredOn()) {
+            System.out.println("[-] İşlem başarısız: TV kapalı. Lütfen önce TV'yi açınız.");
+            return;
+        }
+        try {
+            Channel ch = tvService.changeChannel(kanalNo);
+            System.out.println("[📺] Kanal Değiştirildi: " + ch.getNumber() + " - " + ch.getName() + " (" + ch.getCategory().getDisplayName() + ")");
+        } catch (Exception e) {
+            System.out.println("[-] Hata: " + e.getMessage());
         }
     }
-    // 5. seçenek hakkı
-    public void sesiArir() {
-        if (acik && ses < 20) {
-            ses++;
-            System.out.println("Ses: " + ses);
-        } else {
-            if(!acik) {
-                System.out.println("TV kapalı.");
-            }
-            System.out.println("TV kapalı veya ses seviyesi maksimum zaten.");
+
+    // 7. Seçenek: Kanal Bilgisini Göster
+    public void kanalBilgisiniGoster() {
+        if (!tvService.isPoweredOn()) {
+            System.out.println("[-] TV kapalı.");
+            return;
         }
+        tvService.getCurrentChannel().ifPresentOrElse(
+                ch -> System.out.println("[ℹ️] Aktif Kanal: " + ch),
+                () -> System.out.println("[!] Henüz bir kanal seçilmedi.")
+        );
+    }
+
+    // Tüm Kanalları Listele
+    public List<Kanal> getKanalListesi() {
+        List<Kanal> list = new ArrayList<>();
+        for (Channel c : tvService.getAllChannels()) {
+            list.add(new Kanal(c.getName(), String.valueOf(c.getNumber()), c.getCategory()));
+        }
+        return list;
+    }
+
+    public TvService getTvService() {
+        return tvService;
+    }
+
+    public Television getTelevision() {
+        return television;
     }
 
     @Override
     public String toString() {
-        return "marka: " + marka + " \t boyut: " + boyut;
-
-    }
-    // 6. seçim hakkı için
-    public void kanaliDegistir(int degistir) {
-        if (!acik) {
-            System.out.println("TV kapalı.");
-            return;
-        }
-        if (degistir > 0 && degistir <= kanallar.size()) {
-            kanalNumarasi = degistir;
-            kanalAdi = kanallar.get(degistir - 1).getKanalAdi();
-            System.out.println("Kanal değiştirildi: " + kanalNumarasi + " - " + kanalAdi);
-        } else {
-            System.out.println("Geçersiz kanal numarası.");
-        }
-    }
-    // 7. seçim hakkı için
-    public void kanalBilgisiniGoster() {
-        if (!acik) {
-            System.out.println("TV kapalı.");
-            return;
-        }
-        if (kanalAdi == null || kanalNumarasi == 0) {
-            System.out.println("Henüz kanal seçilmedi.");
-        } else {
-            System.out.println(kanalNumarasi + "." + kanalAdi);
-        }
+        return String.format("%s (%s) - Durum: %s | Ses: %d",
+                television.getBrand(),
+                getBoyut(),
+                tvService.isPoweredOn() ? "AÇIK" : "KAPALI",
+                television.getVolume());
     }
 }
